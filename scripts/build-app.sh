@@ -19,6 +19,7 @@ cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
 cp "$project_dir/Resources/VinylCrackleLoop.wav" "$app_dir/Contents/Resources/VinylCrackleLoop.wav"
 cp "$project_dir/Resources/VinylNeedleDrop.wav" "$app_dir/Contents/Resources/VinylNeedleDrop.wav"
 cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
+cp "$project_dir/LICENSE" "$app_dir/Contents/Resources/LICENSE"
 codesign --force --deep --sign - "$app_dir"
 
 echo "$app_dir"

@@ -26,6 +26,10 @@ Built with SwiftUI and native macOS Liquid Glass. No Dock clutter, accounts, or 
 - Xcode with Swift 6.2 or later to build from source.
 - Spotify or Apple Music is optional. macOS may request Automation permission for music controls.
 
+## Download
+
+Download the Apple silicon build from [Releases](https://github.com/burakhantd/advanced-background-noise/releases/latest). macOS 26 or later is required.
+
 ## Build and run
 
 ```sh
@@ -50,3 +54,7 @@ The source does not include personal audio libraries, user preferences, credenti
 ## Developer
 
 [burakhan.studio](https://burakhan.studio)
+
+## License
+
+[MIT](LICENSE). Contributions are welcome.
