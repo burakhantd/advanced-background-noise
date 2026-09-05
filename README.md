@@ -2,9 +2,9 @@
 
 # Advanced Background Noise
 
-Your own soundscape, one click from the macOS menu bar. Combine built-in background sounds with local audio, add a second layer, and settle into work or wind down for the night.
+A macOS menu bar app for playing and mixing background audio. Use built-in macOS sounds or your own audio files, save five sound shortcuts, and control Spotify or Apple Music from the same panel.
 
-Built with SwiftUI and native macOS Liquid Glass. No Dock clutter, accounts, or cloud library.
+Includes adjustable audio layers, seamless loops, vinyl crackle, and sleep timers. Built with SwiftUI for macOS 26 and later.
 
 ## Features
 
