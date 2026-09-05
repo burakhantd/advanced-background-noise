@@ -1,3 +1,4 @@
+<img width="401" height="443" alt="Ekran Resmi 2026-09-05 11 18 25" src="https://github.com/user-attachments/assets/403c9fad-0240-45aa-899b-934dd6915b65" />
 <p align="center"><img src="Resources/AppIcon.png" width="128" alt="Advanced Background Noise icon"></p>
 
 # Advanced Background Noise
