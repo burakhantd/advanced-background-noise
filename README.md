@@ -1,8 +1,6 @@
-<img width="732" height="772" alt="ambient_noise_timer-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/033cecd5-9c03-4562-83cf-42d84f00b743" />
-<img width="401" height="443" alt="Ekran Resmi 2026-09-05 11 18 25" src="https://github.com/user-attachments/assets/403c9fad-0240-45aa-899b-934dd6915b65" />
-<p align="center"><img src="Resources/AppIcon.png" width="128" alt="Advanced Background Noise icon"></p>
+<p align="center"><img src="Resources/AppIcon.png" width="128" alt="Ambient Sounds icon"></p>
 
-# Advanced Background Noise
+# Ambient Sounds
 
 A macOS menu bar app for playing and mixing background audio. Use built-in macOS sounds or your own audio files, save five sound shortcuts, and control Spotify or Apple Music from the same panel.
 
@@ -36,7 +34,7 @@ Download the Apple silicon build from [Releases](https://github.com/burakhantd/a
 
 ```sh
 ./scripts/build-app.sh
-open "build/Advanced Background Noise.app"
+open "build/Ambient Sounds.app"
 ```
 
 The build script creates an ad-hoc signed app for your Mac's architecture. It is not Developer ID signed or notarized. For a locally trusted installation, build from source.
