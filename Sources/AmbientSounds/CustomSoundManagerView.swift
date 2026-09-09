@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CustomSoundManagerView: View {
@@ -8,7 +9,6 @@ struct CustomSoundManagerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
-            layerVolumeControl
             folderCreator
 
             if store.customSounds.isEmpty {
@@ -36,39 +36,79 @@ struct CustomSoundManagerView: View {
                     .padding(.vertical, 2)
                 }
             }
+
         }
         .padding(18)
         .frame(height: 440)
+        .overlay(alignment: .bottomTrailing) {
+            brandLogo
+                .padding(.trailing, 18)
+                .padding(.bottom, 18)
+        }
+        .overlay(alignment: .bottomLeading) {
+            coffeeLink
+                .padding(.leading, 18)
+                .padding(.bottom, 18)
+        }
     }
 
-    private var layerVolumeControl: some View {
-        HStack(spacing: 12) {
-            Label("Second layer", systemImage: "square.stack.3d.up.fill")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Color.secondaryLayerAccent)
-                .frame(width: 112, alignment: .leading)
-                .help("Layer volume relative to the master")
-
-            Slider(
-                value: Binding(
-                    get: { store.layerVolume },
-                    set: { store.layerVolumeChanged($0) }
-                ),
-                in: 0...1
-            )
-            .tint(Color.secondaryLayerAccent)
-
-            Text("%\(Int(store.layerVolume * 100))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 36, alignment: .trailing)
-
+    private var brandLogo: some View {
+        Button(action: openBrandWebsite) {
+            Group {
+                if let logoURL = Bundle.main.url(forResource: "Logo Alpha", withExtension: "png"),
+                   let logo = NSImage(contentsOf: logoURL) {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                } else {
+                    Image(systemName: "globe")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 25, height: 25)
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .glassEffect(
-            .clear.tint(Color.secondaryLayerAccent.opacity(0.06)),
-            in: .rect(cornerRadius: 12)
-        )
+        .buttonStyle(.plain)
+        .help("Open burakhan.studio")
+        .accessibilityLabel("Open burakhan.studio")
+    }
+
+    private var coffeeLink: some View {
+        Button(action: openCoffeeWebsite) {
+            HStack(spacing: 6) {
+                if let logoURL = Bundle.main.url(forResource: "BuyMeACoffee", withExtension: "png"),
+                   let logo = NSImage(contentsOf: logoURL) {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: "cup.and.saucer.fill")
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Buy me a coffee")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(height: 25)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open buymeacoffee.com/burakhanstudio")
+        .accessibilityLabel("Buy me a coffee")
+    }
+
+    private func openBrandWebsite() {
+        guard let url = URL(string: "https://burakhan.studio") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func openCoffeeWebsite() {
+        guard let url = URL(string: "https://buymeacoffee.com/burakhanstudio") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var header: some View {
@@ -77,9 +117,11 @@ struct CustomSoundManagerView: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 13, weight: .bold))
                     .frame(width: 28, height: 28)
+                    .glassEffect(.clear.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
-            .glassEffect(.clear.interactive(), in: .circle)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
             .help("Back to controls")
 
             Text("Custom Sounds")
@@ -89,9 +131,11 @@ struct CustomSoundManagerView: View {
 
             Button(action: store.addCustomSound) {
                 Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 32, height: 32)
             }
             .buttonStyle(.glassProminent)
-            .controlSize(.small)
+            .clipShape(Circle())
             .help("Add sound")
         }
     }
@@ -146,27 +190,31 @@ struct CustomSoundManagerView: View {
                     Button {
                         store.setSymbol(symbol, for: sound.id)
                     } label: {
-                        Label(symbol == sound.symbol ? "Selected" : symbol, systemImage: symbol)
+                        Label(symbol == sound.symbol ? "Selected" : symbolTitle(symbol), systemImage: symbol)
                     }
                 }
             } label: {
-                Image(systemName: sound.symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 34, height: 34)
+                ZStack {
+                    Circle()
+                        .fill(.quaternary.opacity(0.55))
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                        }
+
+                    Image(systemName: sound.symbol)
+                        .font(.system(size: 17, weight: .semibold))
+                }
+                .frame(width: 44, height: 44)
             }
             .menuStyle(.borderlessButton)
-            .glassEffect(.clear.interactive(), in: .circle)
             .help("Change icon")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(sound.name)
-                    .lineLimit(1)
+                ScrollingTrackName(text: sound.name)
                 Text(durationLabel(sound.duration))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
-                Text(sound.measuredRMSDecibels == nil ? "Normalizing…" : "Matched to system sound level")
-                    .font(.caption2)
-                    .foregroundStyle(sound.measuredRMSDecibels == nil ? .orange : .secondary)
             }
 
             Spacer()
@@ -201,6 +249,31 @@ struct CustomSoundManagerView: View {
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private func symbolTitle(_ symbol: String) -> String {
+        switch symbol {
+        case "waveform": return "Waveform"
+        case "water.waves": return "Water waves"
+        case "cloud.rain.fill": return "Rain cloud"
+        case "drop.fill": return "Drop"
+        case "flame.fill": return "Flame"
+        case "leaf.fill": return "Leaf"
+        case "wind": return "Wind"
+        case "moon.stars.fill": return "Moon and stars"
+        case "bird.fill": return "Bird"
+        case "tree.fill": return "Tree"
+        case "mountain.2.fill": return "Mountain"
+        case "music.note": return "Music note"
+        case "sparkles": return "Sparkles"
+        case "heart.fill": return "Heart"
+        case "headphones": return "Headphones"
+        default:
+            return symbol
+                .replacingOccurrences(of: ".fill", with: "")
+                .replacingOccurrences(of: ".", with: " ")
+                .capitalized
+        }
+    }
+
     private func addFolder() {
         if store.addFolder(named: newFolderName) {
             newFolderName = ""
@@ -210,5 +283,38 @@ struct CustomSoundManagerView: View {
     private func durationLabel(_ duration: TimeInterval) -> String {
         let total = Int(duration.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct ScrollingTrackName: View {
+    let text: String
+
+    @State private var isHovered = false
+    @State private var textWidth: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            Text(text)
+                .font(.system(size: 14, weight: .medium))
+                .fixedSize(horizontal: true, vertical: false)
+                .background {
+                    GeometryReader { textProxy in
+                        Color.clear
+                            .onAppear { textWidth = textProxy.size.width }
+                            .onChange(of: textProxy.size.width) { _, newWidth in
+                                textWidth = newWidth
+                            }
+                    }
+                }
+                .offset(x: isHovered ? min(0, proxy.size.width - textWidth) : 0)
+                .animation(.easeInOut(duration: 1.25), value: isHovered)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+                .onHover { hovering in
+                    isHovered = hovering
+                }
+        }
+        .frame(height: 20)
+        .clipped()
     }
 }

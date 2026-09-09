@@ -1,8 +1,25 @@
 import XCTest
 import AVFoundation
-@testable import BackgroundSoundsMenu
+@testable import AmbientSounds
 
 final class BackgroundSoundTests: XCTestCase {
+    func testSpotifyFavoriteLabelsReflectConfirmedState() {
+        XCTAssertEqual(SpotifyAccessibility.favoriteState(for: "Beğenilen Şarkılar'a ekle"), false)
+        XCTAssertEqual(SpotifyAccessibility.favoriteState(for: "Beğenilen Şarkılar'dan kaldır"), true)
+        XCTAssertEqual(SpotifyAccessibility.favoriteState(for: "Beğenilen Şarkılar’dan kaldır"), true)
+        XCTAssertEqual(SpotifyAccessibility.favoriteState(for: "Add to Liked Songs"), false)
+        XCTAssertNil(SpotifyAccessibility.favoriteState(for: "Kitaplığın'a kaydet"))
+    }
+
+    @MainActor
+    func testNotifyMenuOpenedIncrementsCount() throws {
+        throw XCTSkip("Store integration test is opt-in because audio hardware is not available in headless test runner.")
+        let store = BackgroundSoundsStore()
+        let initial = store.menuOpenCount
+        store.notifyMenuOpened()
+        XCTAssertEqual(store.menuOpenCount, initial + 1)
+    }
+
     func testPanelStaysBelowMenuBarForReportedScreenGeometry() {
         let visible = CGRect(x: 0, y: 0, width: 2056, height: 1290)
         let anchor = CGRect(x: 1361, y: 1295.5, width: 32, height: 29)
@@ -12,6 +29,37 @@ final class BackgroundSoundTests: XCTestCase {
             XCTAssertLessThanOrEqual(frame.maxY, visible.maxY - 6)
             XCTAssertTrue(visible.contains(frame))
         }
+    }
+
+    func testPanelVerticalPositionIgnoresStatusSymbolBounds() {
+        let visible = CGRect(x: 0, y: 0, width: 2056, height: 1290)
+        let size = CGSize(width: 386, height: 530)
+        let highSymbol = MenuPanelPlacement.origin(
+            size: size,
+            anchor: CGRect(x: 1361, y: 1295.5, width: 32, height: 29),
+            visibleFrame: visible
+        )
+        let compactSymbol = MenuPanelPlacement.origin(
+            size: size,
+            anchor: CGRect(x: 1361, y: 1302, width: 32, height: 16),
+            visibleFrame: visible
+        )
+
+        XCTAssertEqual(highSymbol.y, compactSymbol.y)
+    }
+
+    func testPanelOriginStaysFixedWhenContentHeightChanges() {
+        let visible = CGRect(x: 0, y: 0, width: 2056, height: 1290)
+        let anchor = CGRect(x: 1361, y: 1295.5, width: 32, height: 29)
+        let initial = MenuPanelPlacement.origin(
+            size: CGSize(width: 386, height: 408), anchor: anchor, visibleFrame: visible
+        )
+        let resized = MenuPanelPlacement.origin(
+            size: CGSize(width: 386, height: 530), anchor: anchor, visibleFrame: visible,
+            lockedOrigin: initial
+        )
+
+        XCTAssertEqual(resized, initial)
     }
 
     func testPanelFitsAtEitherEdgeOfSecondaryScreen() {
@@ -29,6 +77,43 @@ final class BackgroundSoundTests: XCTestCase {
         XCTAssertEqual(MediaSource.music.applicationBundleIdentifier, "com.apple.Music")
         XCTAssertNil(MediaSource.none.applicationBundleIdentifier)
         XCTAssertNil(MediaSource.system.applicationBundleIdentifier)
+    }
+
+    func testPausedMusicRemainsTheSelectedSourceWhenSpotifyIsAlsoPaused() {
+        let spotify = NowPlayingItem(
+            title: "Spotify track",
+            artist: "Spotify artist",
+            isPlaying: false,
+            source: .spotify
+        )
+        let music = NowPlayingItem(
+            title: "Music track",
+            artist: "Music artist",
+            isPlaying: false,
+            source: .music
+        )
+
+        let selected = MediaApplicationBridge.selectNowPlaying(
+            spotify: spotify,
+            music: music,
+            preferredSource: .music
+        )
+
+        XCTAssertEqual(selected?.source, .music)
+        XCTAssertEqual(selected?.title, "Music track")
+    }
+
+    func testPlaybackIntentUsesExplicitCommandsForRapidTaps() {
+        XCTAssertEqual(MediaApplicationBridge.control(forDesiredPlaybackState: true), .play)
+        XCTAssertEqual(MediaApplicationBridge.control(forDesiredPlaybackState: false), .pause)
+    }
+
+    func testRapidPlaybackIntentsBuildOnTheLatestRequestedState() {
+        var intents = PlaybackIntentState()
+
+        XCTAssertTrue(intents.nextDesiredState(observedState: false))
+        XCTAssertFalse(intents.nextDesiredState(observedState: false))
+        XCTAssertTrue(intents.nextDesiredState(observedState: false))
     }
 
     func testVinylTextureAssetsAndMusicRelativeLevels() throws {
@@ -62,6 +147,12 @@ final class BackgroundSoundTests: XCTestCase {
         XCTAssertEqual(TimerPreset.ninety.label, "1.5 hr")
         XCTAssertEqual(TimerPreset.oneTwenty.label, "2 hr")
         XCTAssertEqual(TimerPreset.allCases.map(\.rawValue), [15, 30, 45, 60, 90, 120])
+    }
+
+    func testTimerPresetAccentColorsAreDefined() {
+        for preset in TimerPreset.allCases {
+            _ = preset.accentColor
+        }
     }
 
     func testTwoMinuteLoopCrossfadesDuringFinalThirtySeconds() {
@@ -244,6 +335,11 @@ final class BackgroundSoundTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode([SoundReference].self, from: data), references)
     }
 
+    func testCustomSoundLibraryUsesUserSoundsDirectory() {
+        XCTAssertEqual(CustomSoundLibrary.directoryURL.lastPathComponent, "UserSounds")
+        XCTAssertTrue(CustomSoundLibrary.managedURL(for: URL(fileURLWithPath: "/tmp/ocean.m4a"), id: UUID()).path.contains("/UserSounds/"))
+    }
+
     func testDefaultShortcutReferencesMatchLegacyGroups() {
         XCTAssertEqual(
             BackgroundSoundsStore.defaultShortcuts,
@@ -279,5 +375,30 @@ final class BackgroundSoundTests: XCTestCase {
         try bridge.startTimer(minutes: 45)
         let actualEnd = try XCTUnwrap(bridge.snapshot().timerEnd)
         XCTAssertEqual(actualEnd.timeIntervalSince1970, expectedEnd.timeIntervalSince1970, accuracy: 2)
+    }
+
+    func testVinylArtworkShapePathAndAnimation() {
+        let rect = CGRect(x: 0, y: 0, width: 86, height: 86)
+
+        // Normal mode (off): cornerRadius 9, holeRadius 0
+        var normalShape = VinylArtworkShape(cornerRadius: 9, holeRadius: 0)
+        let normalPath = normalShape.path(in: rect)
+        XCTAssertFalse(normalPath.isEmpty)
+        XCTAssertEqual(normalShape.cornerRadius, 9)
+        XCTAssertEqual(normalShape.holeRadius, 0)
+
+        // Vinyl mode (on): cornerRadius 43 (circle), holeRadius 6.5
+        let vinylShape = VinylArtworkShape(cornerRadius: 43, holeRadius: 6.5)
+        let vinylPath = vinylShape.path(in: rect)
+        XCTAssertFalse(vinylPath.isEmpty)
+        XCTAssertEqual(vinylShape.cornerRadius, 43)
+        XCTAssertEqual(vinylShape.holeRadius, 6.5)
+
+        // Animatable data round-trip
+        normalShape.animatableData = .init(43, 6.5)
+        XCTAssertEqual(normalShape.cornerRadius, 43)
+        XCTAssertEqual(normalShape.holeRadius, 6.5)
+        XCTAssertEqual(normalShape.animatableData.first, 43)
+        XCTAssertEqual(normalShape.animatableData.second, 6.5)
     }
 }

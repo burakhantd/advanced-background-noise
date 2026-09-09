@@ -32,9 +32,15 @@ enum ArtworkColorExtractor {
         var samples = 0.0
     }
 
-    static func accent(from url: URL) async -> ArtworkAccent? {
+   static func accent(from url: URL) async -> ArtworkAccent? {
+        let rawData: Data?
+        if url.isFileURL {
+            rawData = try? Data(contentsOf: url)
+        } else {
+            rawData = (try? await URLSession.shared.data(from: url))?.0
+        }
         guard
-            let (data, _) = try? await URLSession.shared.data(from: url),
+            let data = rawData,
             let image = NSImage(data: data),
             let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return nil }

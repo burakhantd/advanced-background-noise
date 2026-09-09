@@ -1,15 +1,29 @@
 import SwiftUI
 
 @main
-struct BackgroundSoundsMenuApp {
+struct AmbientSoundsApp {
     @MainActor
     static func main() {
+        migrateLegacyPreferences()
         let application = NSApplication.shared
         application.setActivationPolicy(.accessory)
-        _ = BackgroundSoundsMenuApp()
+        _ = AmbientSoundsApp()
         let delegate = StatusBarDelegate()
         application.delegate = delegate
         withExtendedLifetime(delegate) { application.run() }
+    }
+
+    private static func migrateLegacyPreferences() {
+        let defaults = UserDefaults.standard
+        guard
+            let legacyPreferences = defaults.persistentDomain(
+                forName: "app.advancedbackgroundnoise.mac"
+            )
+        else { return }
+
+        for (key, value) in legacyPreferences where defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
     }
 
     @MainActor

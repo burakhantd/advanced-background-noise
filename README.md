@@ -34,15 +34,15 @@ Ambient Sounds lives in the menu bar and keeps the useful controls close:
 
 - **16 system soundscapes** — Balanced, Bright and Dark Noise, Ocean, Rain, Stream, Night, Fire, Babble, Steam, Airplane, Boat, Bus, Train, Rain on Roof and Quiet Night.
 - **Five primary shortcuts** — right-click the menu bar icon to jump between saved sounds, pause the active sound or quit.
-- **Custom sound library** — import local audio, keep a copy in Application Support, choose an SF Symbol and organize sounds into folders.
+- **Custom sound library** — import local audio, keep a protected copy in `Application Support/Ambient Sounds/UserSounds`, choose an SF Symbol and organize sounds into folders.
 - **Layered playback** — blend a second custom sound with relative volume while the master control keeps the whole mix coherent.
 - **Smooth looping** — equal-power crossfades use the last 30 seconds when possible and adapt automatically to shorter clips.
 - **Level matching** — imported audio is analyzed and normalized so a custom track sits naturally beside a system sound.
 - **Vinyl texture** — add a needle-drop and continuous crackle that follows the current music level.
 
-## The latest UI pass
+## Timers, music and your library
 
-The current working-tree changes focus on making the panel feel more alive while keeping it calm and readable.
+Keep your background mix, sleep timer and music controls together in one menu bar panel.
 
 ### Timers that explain themselves
 
@@ -88,7 +88,7 @@ The main panel brings the whole listening session together:
 
 ## Download
 
-Download the Apple silicon build from [Releases](https://github.com/burakhantd/advanced-background-noise/releases/latest). macOS 26 or later is required.
+Download [Ambient Sounds for Apple silicon](https://github.com/burakhantd/ambient-sounds/releases/latest). macOS 26 or later is required. Unzip the download and move **Ambient Sounds.app** to Applications.
 
 ## Build and run
 

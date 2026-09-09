@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "BackgroundSoundsMenu",
+    name: "AmbientSounds",
     platforms: [.macOS(.v26)],
     products: [
-        .executable(name: "BackgroundSoundsMenu", targets: ["BackgroundSoundsMenu"])
+        .executable(name: "AmbientSounds", targets: ["AmbientSounds"])
     ],
     targets: [
         .executableTarget(
-            name: "BackgroundSoundsMenu",
-            path: "Sources/BackgroundSoundsMenu"
+            name: "AmbientSounds",
+            path: "Sources/AmbientSounds"
         ),
         .testTarget(
-            name: "BackgroundSoundsMenuTests",
-            dependencies: ["BackgroundSoundsMenu"],
-            path: "Tests/BackgroundSoundsMenuTests"
+            name: "AmbientSoundsTests",
+            dependencies: ["AmbientSounds"],
+            path: "Tests/AmbientSoundsTests"
         )
     ],
     swiftLanguageModes: [.v5]

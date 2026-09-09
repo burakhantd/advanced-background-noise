@@ -2,31 +2,56 @@ import AppKit
 import Combine
 import SwiftUI
 
+private final class StablePopoverAnchorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 /// Owns the status item so left and right clicks have distinct, native behavior.
 @MainActor
 final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     static var store: BackgroundSoundsStore?
+    nonisolated(unsafe) static var suppressPopoverDismiss = false
+    static weak var shared: StatusBarDelegate?
+
+    static func beginSuppressingDismiss() {
+        suppressPopoverDismiss = true
+        shared?.popover.behavior = .applicationDefined
+    }
+
+    static func endSuppressingDismiss() {
+        suppressPopoverDismiss = false
+        shared?.popover.behavior = .transient
+        shared?.focusPopover()
+    }
+    private var presentationAnchor: CGRect?
+    private var presentationOrigin: CGPoint?
+    private var popoverClosedTimestamp: TimeInterval = 0
     private var statusItem: NSStatusItem?
+    private let popoverAnchorView = StablePopoverAnchorView(
+        frame: CGRect(x: -8, y: -6, width: 48, height: 36)
+    )
     private let popover = NSPopover()
     private var observation: AnyCancellable?
-    private var resizeObservation: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
         guard let store = Self.store else { return }
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: 32)
         statusItem = item
         item.button?.target = self
         item.button?.action = #selector(handleClick)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        if let button = item.button, let superview = button.superview {
+            // Keep the popover attached to a stable, oversized invisible
+            // rectangle rather than to the changing SF Symbol bounds.
+            popoverAnchorView.alphaValue = 0.001
+            popoverAnchorView.autoresizingMask = []
+            popoverAnchorView.frame = button.frame.insetBy(dx: -8, dy: -6)
+            superview.addSubview(popoverAnchorView, positioned: .below, relativeTo: button)
+        }
         popover.behavior = .transient
         popover.delegate = self
         popover.animates = false
-        resizeObservation = NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)
-            .sink { [weak self] notification in
-                guard let self, let window = notification.object as? NSWindow,
-                      window === self.popover.contentViewController?.view.window else { return }
-                self.positionPopover()
-            }
         popover.contentViewController = NSHostingController(rootView: MenuContentView(store: store))
         updateIcon()
         if CommandLine.arguments.contains("--show-panel") || CommandLine.arguments.contains("--verify-panel-position") {
@@ -43,7 +68,9 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
                     print("POSITION FAIL: button=\(statusItem?.button != nil) anchor=\(String(describing: statusItem?.button?.window?.frame)) panel=\(String(describing: popover.contentViewController?.view.window?.frame)) shown=\(popover.isShown)")
                     Foundation.exit(1)
                 }
-                let anchor = anchorWindow.convertToScreen(button.convert(button.bounds, to: nil))
+                let anchor = anchorWindow.convertToScreen(
+                    popoverAnchorView.convert(popoverAnchorView.bounds, to: nil)
+                )
                 let panel = panelWindow.frame
                 let safeTop = min(anchor.minY, screen.visibleFrame.maxY)
                 let passed = panel.maxY <= safeTop + 1 && panel.minY >= screen.visibleFrame.minY && panelWindow.isKeyWindow && button.isHighlighted
@@ -64,45 +91,68 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
 
     private func updateIcon() {
         guard let store = Self.store else { return }
-        let image = NSImage(systemSymbolName: store.menuBarSymbol, accessibilityDescription: "Advanced Background Noise")
+        let image = NSImage(systemSymbolName: store.menuBarSymbol, accessibilityDescription: "Ambient Sounds")
         image?.isTemplate = true
         statusItem?.button?.image = image
-        statusItem?.button?.toolTip = "Advanced Background Noise"
+        statusItem?.button?.toolTip = "Ambient Sounds"
     }
 
-    @objc private func handleClick() {
-        guard let button = statusItem?.button else { return }
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            popover.performClose(nil)
-            showQuickMenu()
-        } else if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-            if let hostingView = popover.contentViewController?.view {
-                hostingView.layoutSubtreeIfNeeded()
-                popover.contentSize = hostingView.fittingSize
-            }
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            positionPopover()
-            focusPopover()
+   @objc private func handleClick() {
+       guard let button = statusItem?.button else { return }
+       if NSApp.currentEvent?.type == .rightMouseUp {
+           popover.performClose(nil)
+           showQuickMenu()
+            return
         }
-    }
-
-    func popoverDidShow(_ notification: Notification) {
+        if popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - popoverClosedTimestamp < 0.28 {
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        if let hostingView = popover.contentViewController?.view {
+            hostingView.layoutSubtreeIfNeeded()
+            popover.contentSize = hostingView.fittingSize
+        }
+        presentationAnchor = button.window.map {
+            $0.convertToScreen(popoverAnchorView.convert(popoverAnchorView.bounds, to: nil))
+        }
+        presentationOrigin = nil
+        popover.show(
+            relativeTo: popoverAnchorView.bounds,
+            of: popoverAnchorView,
+            preferredEdge: .minY
+        )
         positionPopover()
         focusPopover()
     }
 
-    func popoverDidClose(_ notification: Notification) {
-        statusItem?.button?.highlight(false)
+   func popoverDidShow(_ notification: Notification) {
+       positionPopover()
+       focusPopover()
+       Self.store?.notifyMenuOpened()
+   }
+
+    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        !Self.suppressPopoverDismiss
     }
+
+   func popoverDidClose(_ notification: Notification) {
+       popoverClosedTimestamp = ProcessInfo.processInfo.systemUptime
+       presentationAnchor = nil
+       presentationOrigin = nil
+       statusItem?.button?.highlight(false)
+   }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         if popover.isShown { focusPopover() }
     }
 
     func applicationDidResignActive(_ notification: Notification) {
+        if Self.suppressPopoverDismiss { return }
         popover.performClose(nil)
     }
 
@@ -116,10 +166,16 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
         guard popover.isShown, let button = statusItem?.button,
               let anchorWindow = button.window, let screen = anchorWindow.screen,
               let window = popover.contentViewController?.view.window else { return }
-        let anchor = anchorWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        let origin = MenuPanelPlacement.origin(
-            size: window.frame.size, anchor: anchor, visibleFrame: screen.visibleFrame
+        let anchor = presentationAnchor ?? anchorWindow.convertToScreen(
+            popoverAnchorView.convert(popoverAnchorView.bounds, to: nil)
         )
+        let origin = MenuPanelPlacement.origin(
+            size: window.frame.size,
+            anchor: anchor,
+            visibleFrame: screen.visibleFrame,
+            lockedOrigin: presentationOrigin
+        )
+        if presentationOrigin == nil { presentationOrigin = origin }
         if window.frame.origin != origin { window.setFrameOrigin(origin) }
     }
 

@@ -26,10 +26,11 @@ final class BackgroundSoundsStore: ObservableObject {
     @Published private(set) var layerShortcuts: [UUID?]
     @Published private(set) var activeLayerSoundID: UUID?
     @Published private(set) var isLayerEnabled = false
-    @Published private(set) var layerVolume: Double
-    @Published private(set) var isVinylNoiseEnabled = false
+   @Published private(set) var layerVolume: Double
+   @Published private(set) var isVinylNoiseEnabled = false
+    @Published private(set) var menuOpenCount = 0
 
-    private let bridge: SystemBackgroundSounds
+   private let bridge: SystemBackgroundSounds
     private let customPlayer = CustomLoopPlayer()
     private let layerPlayer = CustomLoopPlayer()
     private let vinylNoisePlayer = VinylNoisePlayer()
@@ -41,6 +42,8 @@ final class BackgroundSoundsStore: ObservableObject {
     private let layerShortcutsDefaultsKey = "layerSoundShortcuts"
     private let layerVolumeDefaultsKey = "layerVolume"
     private let relativeLayerVolumeDefaultsKey = "layerVolumeIsRelativeV2"
+    private static let activeTimerMinutesDefaultsKey = "activeTimerMinutes"
+    private static let activeTimerEndDefaultsKey = "activeTimerEnd"
     private var pollTimer: Timer?
     private var timerCompletionTimer: Timer?
     private var isApplyingChange = false
@@ -63,7 +66,11 @@ final class BackgroundSoundsStore: ObservableObject {
                     return sound
                 }
                 if let recoveredURL = CustomSoundLibrary.recoveryURL(for: sourceURL, id: sound.id) {
-                    sound.path = recoveredURL.path
+                    if let localURL = try? CustomSoundLibrary.copyIntoLibrary(sourceURL: recoveredURL, id: sound.id) {
+                        sound.path = localURL.path
+                    } else {
+                        sound.path = recoveredURL.path
+                    }
                     return sound
                 }
                 return nil
@@ -190,15 +197,19 @@ final class BackgroundSoundsStore: ObservableObject {
     }
 
     func title(for reference: SoundReference) -> String {
-        switch reference {
-        case .system(let group): return BackgroundSound.sound(for: group).title
-        case .custom(let id): return customSounds.first(where: { $0.id == id })?.name ?? "Custom Sound"
-        }
+       switch reference {
+       case .system(let group): return BackgroundSound.sound(for: group).title
+       case .custom(let id): return customSounds.first(where: { $0.id == id })?.name ?? "Custom Sound"
+       }
+   }
+
+    func notifyMenuOpened() {
+        menuOpenCount += 1
     }
 
-    func symbol(for reference: SoundReference) -> String {
-        switch reference {
-        case .system(let group): return BackgroundSound.sound(for: group).symbol
+   func symbol(for reference: SoundReference) -> String {
+       switch reference {
+       case .system(let group): return BackgroundSound.sound(for: group).symbol
         case .custom(let id): return customSounds.first(where: { $0.id == id })?.symbol ?? "waveform"
         }
     }
@@ -525,6 +536,8 @@ final class BackgroundSoundsStore: ObservableObject {
         timerCompletionTimer?.invalidate()
         timerCompletionTimer = nil
         activeTimerMinutes = nil
+        UserDefaults.standard.removeObject(forKey: Self.activeTimerMinutesDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: Self.activeTimerEndDefaultsKey)
         if isCustomSelected {
             timerEnd = nil
             return
@@ -536,8 +549,11 @@ final class BackgroundSoundsStore: ObservableObject {
     }
 
     func openAccessibilitySettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.Accessibility-Settings.extension?Hearing") else { return }
-        NSWorkspace.shared.open(url)
+        let urls = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ].compactMap(URL.init(string:))
+        for url in urls where NSWorkspace.shared.open(url) { break }
     }
 
     func quit() {
@@ -569,7 +585,16 @@ final class BackgroundSoundsStore: ObservableObject {
             }
             if selectedGroup != state.selectedGroup { selectedGroup = state.selectedGroup }
             if timerEnd != refreshedTimerEnd { timerEnd = refreshedTimerEnd }
-            if refreshedTimerEnd != nil { timerTick = Date() }
+            if let refreshedTimerEnd {
+                timerTick = Date()
+                if activeTimerMinutes == nil {
+                    restoreOrInferActiveTimer(for: refreshedTimerEnd)
+                }
+            } else if activeTimerMinutes != nil {
+                activeTimerMinutes = nil
+                UserDefaults.standard.removeObject(forKey: Self.activeTimerMinutesDefaultsKey)
+                UserDefaults.standard.removeObject(forKey: Self.activeTimerEndDefaultsKey)
+            }
             if errorMessage != nil { errorMessage = nil }
         } catch {
             let message = error.localizedDescription
@@ -577,9 +602,28 @@ final class BackgroundSoundsStore: ObservableObject {
         }
     }
 
+    private func restoreOrInferActiveTimer(for end: Date) {
+        let defaults = UserDefaults.standard
+        if let savedMinutes = defaults.object(forKey: Self.activeTimerMinutesDefaultsKey) as? Int,
+           let savedEnd = defaults.object(forKey: Self.activeTimerEndDefaultsKey) as? TimeInterval,
+           abs(end.timeIntervalSince1970 - savedEnd) < 5 {
+            activeTimerMinutes = savedMinutes
+            scheduleTimerCompletion(at: end, minutes: savedMinutes)
+            return
+        }
+
+        let remainingMinutes = end.timeIntervalSinceNow / 60
+        if let matched = TimerPreset.allCases.filter({ Double($0.rawValue) >= remainingMinutes - 0.5 }).min(by: { $0.rawValue < $1.rawValue }) ?? TimerPreset.allCases.last {
+            activeTimerMinutes = matched.rawValue
+            scheduleTimerCompletion(at: end, minutes: matched.rawValue)
+        }
+    }
+
     private func scheduleTimerCompletion(at end: Date, minutes: Int) {
         timerCompletionTimer?.invalidate()
         activeTimerMinutes = minutes
+        UserDefaults.standard.set(minutes, forKey: Self.activeTimerMinutesDefaultsKey)
+        UserDefaults.standard.set(end.timeIntervalSince1970, forKey: Self.activeTimerEndDefaultsKey)
         let timer = Timer(fire: end, interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.finishTimerAndStopAllPlayback() }
         }
@@ -601,6 +645,8 @@ final class BackgroundSoundsStore: ObservableObject {
         activeLayerSoundID = nil
         timerEnd = nil
         activeTimerMinutes = nil
+        UserDefaults.standard.removeObject(forKey: Self.activeTimerMinutesDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: Self.activeTimerEndDefaultsKey)
         mediaPlaybackStopper.stopAll()
     }
 
