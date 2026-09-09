@@ -3,6 +3,15 @@
     <channel>
         <title>Ambient Sounds</title>
         <item>
+            <title>1.5.0</title>
+            <pubDate>Wed, 09 Sep 2026 22:17:41 +0300</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/burakhantd/ambient-sounds/releases/download/v1.5.0/Ambient-Sounds-1.5.0-macOS-arm64.zip" length="14365637" type="application/octet-stream" sparkle:edSignature="q+T5LTg4fPCGnlA7qdxihdwR2BeBod0dL4b2QYGv2ic1+a10Rh3p49Amp8EFvtRRs4fGUhbokIl5IeHcAjhHAg=="/>
+        </item>
+        <item>
             <title>1.1.0</title>
             <pubDate>Wed, 09 Sep 2026 14:45:56 +0300</pubDate>
             <sparkle:version>2</sparkle:version>
