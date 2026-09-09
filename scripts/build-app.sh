@@ -13,9 +13,11 @@ SWIFTPM_MODULECACHE_OVERRIDE=/tmp/ambient-sounds-module-cache \
 swift build --disable-sandbox --scratch-path "$scratch_dir" -c "$configuration"
 
 rm -rf "$app_dir"
-mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
+mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$app_dir/Contents/Frameworks"
 cp "$binary" "$app_dir/Contents/MacOS/AmbientSounds"
 strip -S "$app_dir/Contents/MacOS/AmbientSounds"
+install_name_tool -add_rpath "@loader_path/../Frameworks" "$app_dir/Contents/MacOS/AmbientSounds" 2>/dev/null || true
+
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
 cp "$project_dir/Resources/VinylCrackleLoop.wav" "$app_dir/Contents/Resources/VinylCrackleLoop.wav"
 cp "$project_dir/Resources/VinylNeedleDrop.wav" "$app_dir/Contents/Resources/VinylNeedleDrop.wav"
@@ -23,10 +25,31 @@ cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.ic
 cp "$project_dir/Resources/Logo Alpha.png" "$app_dir/Contents/Resources/Logo Alpha.png"
 cp "$project_dir/Resources/BuyMeACoffee.png" "$app_dir/Contents/Resources/BuyMeACoffee.png"
 cp "$project_dir/LICENSE" "$app_dir/Contents/Resources/LICENSE"
-# Keep the designated requirement stable across ad-hoc rebuilds. The default
-# ad-hoc requirement is the binary's CDHash, which changes on every build and
-# makes macOS treat the rebuilt app as a new Accessibility client.
-codesign --force --deep --sign - \
+
+if [ -d "$scratch_dir/$configuration/Sparkle.framework" ]; then
+    rm -rf "$app_dir/Contents/Frameworks/Sparkle.framework"
+    cp -R "$scratch_dir/$configuration/Sparkle.framework" "$app_dir/Contents/Frameworks/Sparkle.framework"
+    sparkle_fw="$app_dir/Contents/Frameworks/Sparkle.framework"
+    if [ -d "$sparkle_fw/Versions/Current/XPCServices/Downloader.xpc" ]; then
+        codesign --force --sign - "$sparkle_fw/Versions/Current/XPCServices/Downloader.xpc"
+    fi
+    if [ -d "$sparkle_fw/Versions/Current/XPCServices/Installer.xpc" ]; then
+        codesign --force --sign - "$sparkle_fw/Versions/Current/XPCServices/Installer.xpc"
+    fi
+    if [ -f "$sparkle_fw/Versions/Current/Autoupdate" ]; then
+        codesign --force --sign - "$sparkle_fw/Versions/Current/Autoupdate"
+    fi
+    if [ -d "$sparkle_fw/Versions/Current/Updater.app" ]; then
+        codesign --force --sign - "$sparkle_fw/Versions/Current/Updater.app"
+    fi
+    codesign --force --sign - "$sparkle_fw"
+fi
+
+codesign --force --sign - \
+    --requirements '=designated => identifier "app.ambientsounds.mac"' \
+    "$app_dir/Contents/MacOS/AmbientSounds"
+
+codesign --force --sign - \
     --requirements '=designated => identifier "app.ambientsounds.mac"' \
     "$app_dir"
 

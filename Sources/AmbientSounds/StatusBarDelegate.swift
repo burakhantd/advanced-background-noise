@@ -54,6 +54,7 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
         popover.animates = false
         popover.contentViewController = NSHostingController(rootView: MenuContentView(store: store))
         updateIcon()
+        _ = AppUpdater.shared
         if CommandLine.arguments.contains("--show-panel") || CommandLine.arguments.contains("--verify-panel-position") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
                 if !popover.isShown { handleClick() }
@@ -191,6 +192,9 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
         let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -202,6 +206,10 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
     @objc private func activateShortcut(_ sender: NSMenuItem) {
         guard let store = Self.store, store.shortcuts.indices.contains(sender.tag) else { return }
         store.activatePrimary(store.shortcuts[sender.tag])
+    }
+
+    @objc private func checkForUpdates() {
+        AppUpdater.shared.checkForUpdates()
     }
 
     @objc private func quitApp() { Self.store?.quit() }

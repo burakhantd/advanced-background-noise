@@ -6,3 +6,4 @@ BrandConcepts/
 *.xcuserstate
 .env
 .env.*
+dist/

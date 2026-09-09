@@ -41,15 +41,31 @@ struct CustomSoundManagerView: View {
         .padding(18)
         .frame(height: 440)
         .overlay(alignment: .bottomTrailing) {
-            brandLogo
-                .padding(.trailing, 18)
-                .padding(.bottom, 18)
+            HStack(spacing: 10) {
+                checkForUpdatesButton
+                brandLogo
+            }
+            .padding(.trailing, 18)
+            .padding(.bottom, 18)
         }
         .overlay(alignment: .bottomLeading) {
             coffeeLink
                 .padding(.leading, 18)
                 .padding(.bottom, 18)
         }
+    }
+
+    private var checkForUpdatesButton: some View {
+        Button(action: { AppUpdater.shared.checkForUpdates() }) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 25, height: 25)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Check for Updates")
+        .accessibilityLabel("Check for Updates")
     }
 
     private var brandLogo: some View {

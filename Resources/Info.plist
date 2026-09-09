@@ -28,5 +28,11 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Access is used to display track information and control playback in Spotify and Apple Music.</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/burakhantd/ambient-sounds/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>zsOvANU/6T1ojbWvWA63UNV699HXeQv5wiMJnnjC1+0=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>
