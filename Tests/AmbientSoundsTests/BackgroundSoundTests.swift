@@ -116,6 +116,39 @@ final class BackgroundSoundTests: XCTestCase {
         XCTAssertTrue(intents.nextDesiredState(observedState: false))
     }
 
+    func testSeekIntentProtectsAgainstStaleObservedPositions() {
+        var intent = SeekIntentState()
+        XCTAssertFalse(intent.hasPendingSeek)
+
+        // User seeks from 15s to 90s while playing
+        intent.recordSeek(from: 15, to: 90)
+        XCTAssertTrue(intent.hasPendingSeek)
+
+        // An immediate or 1-second stale poll reporting the old pre-seek position is rejected
+        XCTAssertFalse(intent.reconcile(observedPosition: 15.2, isPlaying: true))
+        XCTAssertTrue(intent.hasPendingSeek)
+        XCTAssertEqual(intent.projectedPosition(fallback: 90, maxDuration: 200), 90, accuracy: 0.5)
+
+        // When the player catches up to near 90s, reconcile succeeds and clears pending seek
+        XCTAssertTrue(intent.reconcile(observedPosition: 90.3, isPlaying: true))
+        XCTAssertFalse(intent.hasPendingSeek)
+    }
+
+    func testSeekIntentProtectsBackwardSeekAgainstStaleObservedPositions() {
+        var intent = SeekIntentState()
+
+        // User seeks backwards from 120s to 30s
+        intent.recordSeek(from: 120, to: 30)
+        XCTAssertTrue(intent.hasPendingSeek)
+
+        // Stale poll still near 120s is rejected
+        XCTAssertFalse(intent.reconcile(observedPosition: 120.5, isPlaying: true))
+
+        // Once player catches up near 30s, reconcile succeeds
+        XCTAssertTrue(intent.reconcile(observedPosition: 30.1, isPlaying: true))
+        XCTAssertFalse(intent.hasPendingSeek)
+    }
+
     func testVinylTextureAssetsAndMusicRelativeLevels() throws {
         let crackleURL = try VinylTextureAssets.crackleURL()
         let needleDropURL = try VinylTextureAssets.needleDropURL()

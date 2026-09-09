@@ -267,6 +267,70 @@ struct PlaybackIntentState: Equatable, Sendable {
     }
 }
 
+struct SeekIntentState: Equatable, Sendable {
+    private(set) var targetPosition: TimeInterval?
+    private(set) var preSeekPosition: TimeInterval?
+    private(set) var seekDate: Date?
+    private var expirationDate: Date?
+
+    var hasPendingSeek: Bool {
+        guard let exp = expirationDate else { return false }
+        return Date() <= exp && targetPosition != nil
+    }
+
+    mutating func recordSeek(from currentPosition: TimeInterval, to targetPosition: TimeInterval) {
+        self.preSeekPosition = currentPosition
+        self.targetPosition = targetPosition
+        let now = Date()
+        self.seekDate = now
+        self.expirationDate = now.addingTimeInterval(2.5)
+    }
+
+    @discardableResult
+    mutating func reconcile(observedPosition: TimeInterval, isPlaying: Bool) -> Bool {
+        guard let target = targetPosition, let seekDate = seekDate, let exp = expirationDate else {
+            return true
+        }
+
+        if Date() > exp {
+            reset()
+            return true
+        }
+
+        let elapsedSinceSeek = isPlaying ? max(0, Date().timeIntervalSince(seekDate)) : 0
+        let expectedPosition = target + elapsedSinceSeek
+
+        // If the observed position is close to the expected position, the player has completed the seek
+        if abs(observedPosition - expectedPosition) < 2.5 || abs(observedPosition - target) < 2.5 {
+            reset()
+            return true
+        }
+
+        // If the observed position is close to the pre-seek position, it is definitely stale
+        if let pre = preSeekPosition, abs(observedPosition - pre) < 2.0 {
+            return false
+        }
+
+        return false
+    }
+
+    func projectedPosition(fallback: TimeInterval, maxDuration: TimeInterval) -> TimeInterval {
+        guard let target = targetPosition, let seekDate = seekDate else {
+            return fallback
+        }
+        let elapsed = max(0, Date().timeIntervalSince(seekDate))
+        let projected = target + elapsed
+        return min(max(projected, 0), max(maxDuration, 0))
+    }
+
+    mutating func reset() {
+        targetPosition = nil
+        preSeekPosition = nil
+        seekDate = nil
+        expirationDate = nil
+    }
+}
+
 struct NowPlayingItem: Equatable, Sendable {
     let title: String
     let artist: String
@@ -413,6 +477,9 @@ final class MediaApplicationBridge {
     }
 
     private let commandQueue = DispatchQueue(label: "AmbientSounds.MediaCommands", qos: .userInitiated)
+    private let queueFetchQueue = DispatchQueue(label: "AmbientSounds.QueueFetch", qos: .utility)
+    private static var lastSpotifyFavoriteCheckTrack: String = ""
+    private static var lastSpotifyFavoriteCheckDate: Date = .distantPast
 
     static func control(forDesiredPlaybackState isPlaying: Bool) -> Control {
         isPlaying ? .play : .pause
@@ -425,9 +492,16 @@ final class MediaApplicationBridge {
         DispatchQueue.global(qos: .utility).async {
             var spotify = Self.spotifyItem()
             if let sp = spotify {
-                if let liveState = SpotifyAccessibility.favorite() {
-                    spotify = sp.updatingFavorited(liveState)
-                    FavoriteTracksManager.shared.setFavorited(liveState, source: .spotify, title: sp.title, artist: sp.artist)
+                let trackKey = "\(sp.title)---\(sp.artist)"
+                let shouldCheckLiveState = trackKey != Self.lastSpotifyFavoriteCheckTrack
+                    || Date().timeIntervalSince(Self.lastSpotifyFavoriteCheckDate) > 15
+                if shouldCheckLiveState {
+                    if let liveState = SpotifyAccessibility.favorite() {
+                        Self.lastSpotifyFavoriteCheckTrack = trackKey
+                        Self.lastSpotifyFavoriteCheckDate = Date()
+                        spotify = sp.updatingFavorited(liveState)
+                        FavoriteTracksManager.shared.setFavorited(liveState, source: .spotify, title: sp.title, artist: sp.artist)
+                    }
                 } else if FavoriteTracksManager.shared.isFavorited(source: .spotify, title: sp.title, artist: sp.artist) {
                     spotify = sp.updatingFavorited(true)
                 }
@@ -633,7 +707,7 @@ final class MediaApplicationBridge {
     }
 
     func fetchUpcomingTracks(for source: MediaSource, completion: @escaping ([QueueTrackItem]) -> Void) {
-        commandQueue.async {
+        queueFetchQueue.async {
             switch source {
             case .music:
                 let script = """
@@ -986,6 +1060,8 @@ final class MediaControllerStore: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var refreshInFlight = false
     private var playbackIntent = PlaybackIntentState()
+    private var seekIntent = SeekIntentState()
+    private var seekTask: Task<Void, Never>?
     private var isAdjustingVolume = false
     private var volumeUpdateTask: Task<Void, Never>?
     @Published var upcomingTracks: [QueueTrackItem] = []
@@ -1027,6 +1103,8 @@ final class MediaControllerStore: ObservableObject {
         timer = nil
         refreshTask?.cancel()
         refreshTask = nil
+        seekTask?.cancel()
+        seekTask = nil
     }
 
     func openSourceApplication() {
@@ -1169,7 +1247,6 @@ final class MediaControllerStore: ObservableObject {
         let requestID = UUID()
         queueRequestID = requestID
         let source = item.source
-        let title = item.title
         upcomingTracks = []
         isLoadingQueue = true
         applicationBridge.fetchUpcomingTracks(for: item.source) { [weak self] tracks in
@@ -1195,11 +1272,19 @@ final class MediaControllerStore: ObservableObject {
         let clampedPosition = item.clampedPosition(position)
         guard item.duration > 0 else { return }
 
-        if item.source == .spotify || item.source == .music {
-            applicationBridge.seek(to: clampedPosition, in: item.source)
-        }
+        seekIntent.recordSeek(from: item.elapsedTime, to: clampedPosition)
         item = item.updatingElapsedTime(clampedPosition)
-        refreshSoon()
+
+        let source = item.source
+        guard source == .spotify || source == .music else { return }
+
+        seekTask?.cancel()
+        seekTask = Task { [weak self] in
+            // Small debounce (25ms) so rapid clicks/scrubs only send the final seek position
+            try? await Task.sleep(for: .milliseconds(25))
+            guard !Task.isCancelled, let self else { return }
+            self.applicationBridge.seek(to: clampedPosition, in: source)
+        }
     }
 
     func setVolume(_ volume: Double) {
@@ -1234,6 +1319,8 @@ final class MediaControllerStore: ObservableObject {
                         || applicationItem.artist != self.item.artist
                     if trackChanged {
                         self.playbackIntent.reset()
+                        self.seekIntent.reset()
+                        self.seekTask?.cancel()
                         self.favoriteTask?.cancel()
                         self.isFavoritePending = false
                         self.favoritePendingTarget = nil
@@ -1260,6 +1347,11 @@ final class MediaControllerStore: ObservableObject {
                         }
                     }
 
+                    if !trackChanged, !self.seekIntent.reconcile(observedPosition: applicationItem.elapsedTime, isPlaying: applicationItem.isPlaying) {
+                        let protectedPosition = self.seekIntent.projectedPosition(fallback: self.item.elapsedTime, maxDuration: applicationItem.duration)
+                        refreshed = refreshed.updatingElapsedTime(protectedPosition)
+                    }
+
                     if refreshed != self.item { self.item = refreshed }
                     self.refreshInFlight = false
                     if self.playbackIntent.pendingState != nil {
@@ -1280,6 +1372,10 @@ final class MediaControllerStore: ObservableObject {
                 if let pendingPlaybackState = self.playbackIntent.pendingState,
                    !self.playbackIntent.reconcile(observedState: refreshed.isPlaying) {
                     refreshed = refreshed.updatingPlaybackState(pendingPlaybackState)
+                }
+                if !self.seekIntent.reconcile(observedPosition: refreshed.elapsedTime, isPlaying: refreshed.isPlaying) {
+                    let protectedPosition = self.seekIntent.projectedPosition(fallback: self.item.elapsedTime, maxDuration: refreshed.duration)
+                    refreshed = refreshed.updatingElapsedTime(protectedPosition)
                 }
                 if refreshed != self.item { self.item = refreshed }
                 self.refreshInFlight = false
