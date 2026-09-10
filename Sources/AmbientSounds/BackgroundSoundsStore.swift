@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 import UniformTypeIdentifiers
 
 @MainActor
@@ -29,6 +30,7 @@ final class BackgroundSoundsStore: ObservableObject {
    @Published private(set) var layerVolume: Double
    @Published private(set) var isVinylNoiseEnabled = false
     @Published private(set) var menuOpenCount = 0
+    @Published private(set) var launchAtLoginStatus = SMAppService.mainApp.status
 
    private let bridge: SystemBackgroundSounds
     private let customPlayer = CustomLoopPlayer()
@@ -183,6 +185,9 @@ final class BackgroundSoundsStore: ObservableObject {
     }
     var effectiveLayerVolume: Double {
         AudioMixing.effectiveLayerVolume(master: volume, relativeLayer: layerVolume)
+    }
+    var isLaunchAtLoginEnabled: Bool {
+        launchAtLoginStatus == .enabled || launchAtLoginStatus == .requiresApproval
     }
     var remainingTime: TimeInterval { max(timerEnd?.timeIntervalSince(timerTick) ?? 0, 0) }
 
@@ -554,6 +559,25 @@ final class BackgroundSoundsStore: ObservableObject {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         ].compactMap(URL.init(string:))
         for url in urls where NSWorkspace.shared.open(url) { break }
+    }
+
+    func toggleLaunchAtLogin() {
+        do {
+            if isLaunchAtLoginEnabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+            refreshLaunchAtLoginStatus()
+            errorMessage = nil
+        } catch {
+            refreshLaunchAtLoginStatus()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshLaunchAtLoginStatus() {
+        launchAtLoginStatus = SMAppService.mainApp.status
     }
 
     func quit() {

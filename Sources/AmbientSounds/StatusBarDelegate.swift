@@ -192,6 +192,20 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let launchAtLoginItem = NSMenuItem(
+            title: "Open at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = store.isLaunchAtLoginEnabled ? .on : .off
+        launchAtLoginItem.image = NSImage(
+            systemSymbolName: "power",
+            accessibilityDescription: nil
+        )
+        menu.addItem(launchAtLoginItem)
+
+        menu.addItem(.separator())
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
         updateItem.target = self
         menu.addItem(updateItem)
@@ -210,6 +224,10 @@ final class StatusBarDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegat
 
     @objc private func checkForUpdates() {
         AppUpdater.shared.checkForUpdates()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        Self.store?.toggleLaunchAtLogin()
     }
 
     @objc private func quitApp() { Self.store?.quit() }

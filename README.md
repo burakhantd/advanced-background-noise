@@ -105,7 +105,7 @@ Run the test suite with:
 swift test --disable-sandbox
 ```
 
-Left-click the menu bar icon to open the controls. Right-click it to access the five primary shortcuts and Quit. To change a shortcut, right-click its button inside the main panel. Use the gear button to manage imported sounds and folders.
+Left-click the menu bar icon to open the controls. Right-click it to access the five primary shortcuts, toggle **Open at Login**, and Quit. To change a shortcut, right-click its button inside the main panel. Use the gear button to manage imported sounds and folders.
 
 ## Implementation notes
 
